@@ -147,9 +147,6 @@ void startWebserver() {
 }
 
 void setup() {
-    pinMode(LED,OUTPUT);
-
-    digitalWrite(LED,LOW);
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.begin(9600);
 #endif
@@ -162,6 +159,9 @@ void setup() {
     pinMode(RESET,OUTPUT);
     digitalWrite(RESET,LOW);
 #endif
+
+    pinMode(6, OUTPUT);
+    digitalWrite(6, LOW);
 
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.println("Initialising module");
@@ -210,6 +210,82 @@ void setup() {
     startWebserver();
 }
 
-void loop() {
+int lightsValue = 0;
 
+void loop() {
+  if (ESP8266.available()) {
+    String resp = readData(2000);
+    int i = 0,j = resp.indexOf('\n');
+    while (j > -1 && j < resp.length()) {
+      String line = resp.substring(i,j);
+      
+      // Process the line
+      if (line.indexOf("GET") > -1) {
+        String url = line.substring(line.indexOf("GET") + 4, line.indexOf("HTTP/1.1") - 1);
+        int connectionId = line.substring(5, line.indexOf(",", 5)).toInt();
+        
+#ifdef DEBUGSERIAL
+          DEBUGSERIAL.print("\nLine: ");
+          DEBUGSERIAL.println(line);
+          DEBUGSERIAL.print("\nURL: ");
+          DEBUGSERIAL.println(url);
+#endif
+        if (url == "/lightsOn") {
+          
+#ifdef DEBUGSERIAL
+          DEBUGSERIAL.println("Lights On");
+#endif
+          digitalWrite(6, HIGH);
+          lightsValue = 255;
+        } else if (url == "/lightsOff") {
+          
+#ifdef DEBUGSERIAL
+          DEBUGSERIAL.println("Lights Off");
+#endif
+          digitalWrite(6, LOW);
+          lightsValue = 0;
+        } else if (url.startsWith("/lightsOn")) {
+          // Figure out the /value part
+          String value = url.substring(10);
+          int v = value.toInt();
+          analogWrite(6, v);
+          lightsValue = v;
+#ifdef DEBUGSERIAL
+          DEBUGSERIAL.print("Set lights value: ");
+          DEBUGSERIAL.println(v);
+#endif
+        }
+        
+     
+        // Send JSON response
+        String response = "HTTP/1.1 200 OK\r\nContent-Type: text/json; charset=utf-8\r\nContent-Length: ";
+        String content = "{\"stat\":\"ok\",\"brightness\":";
+        content+=lightsValue;
+        content+="}";
+        response+=content.length();
+        response+="\r\n\r\n";
+        response+=content;
+        
+        String cipSend = "AT+CIPSEND=";
+        cipSend += connectionId;
+        cipSend += ",";
+        cipSend +=response.length();
+     
+        sendATCommand(cipSend,1000,DEBUG);
+#ifdef DEBUGSERIAL
+          DEBUGSERIAL.println(response);
+#endif
+        ESP8266.print(response);
+        
+        String closeCommand = "AT+CIPCLOSE="; 
+        closeCommand+=connectionId;
+     
+        sendATCommand(closeCommand,3000,DEBUG);
+        break;
+      }
+      
+      i = j + 1;
+      j = resp.indexOf('\n', i);
+    }
+  }
 }
