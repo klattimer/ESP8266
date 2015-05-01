@@ -56,13 +56,28 @@ String sendATCommand(String command, const int timeout, boolean debug)
             response+=c;
         }
     }
-
     if (debug) {
 #ifdef DEBUGSERIAL
         DEBUGSERIAL.print("Response: \"");
         DEBUGSERIAL.print(response);
         DEBUGSERIAL.println("\"");
 #endif
+    }
+
+    
+    if (response.indexOf("busy p...") > -1) {
+      resetModule();
+      moduleInit();
+    }
+    
+    if (response.indexOf("FAIL") > -1) {
+      resetModule();
+      moduleInit();
+    }
+    
+    if (response.endsWith("ERROR\r\n")) {
+      resetModule();
+      moduleInit();
     }
 
     return response;
@@ -85,23 +100,31 @@ String readData(const int timeout) {
     return response;
 }
 
-// This server always sends the same response, nomatter what the request
-// that's the JSON value of the light right now.
-void response() {
-
+void resetModule() {
+#ifdef DEBUGSERIAL
+        DEBUGSERIAL.println("Resetting Module");
+#endif
+    digitalWrite(4, LOW);
+    delay(10);
+    digitalWrite(4, HIGH);
+    delay(1000);
+    digitalWrite(4, LOW);
+    delay(8000);
 }
 
 void reboot() {
+
+#ifdef DEBUGSERIAL
+    DEBUGSERIAL.println("Rebooting...");
+#endif
+    resetModule();
+    
 #ifdef LEONARDO
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.println("Leonardo cannot reboot. Connect pin D8 for hardware reset.");
     digitalWrite(RESET,HIGH);
 #endif
     return;
-#endif
-
-#ifdef DEBUGSERIAL
-    DEBUGSERIAL.println("Rebooting...");
 #endif
 
     delay(1000);
@@ -132,7 +155,7 @@ void startWebserver() {
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.print("Starting webserver on ");
 #endif
-    String response = sendATCommand("AT+CIFSR",1000, DEBUG);
+    String response = sendATCommand("AT+CIFSR",2000, DEBUG);
 
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.println(response);
@@ -146,23 +169,8 @@ void startWebserver() {
 #endif
 }
 
-void setup() {
-#ifdef DEBUGSERIAL
-    DEBUGSERIAL.begin(9600);
-#endif
-    ESP8266.begin(9600); // your esp's baud rate might be different
-
-#ifdef LEONARDO
-    // Wait for serial to become live
-    while (!DEBUGSERIAL);
-    while (!ESP8266);
-    pinMode(RESET,OUTPUT);
-    digitalWrite(RESET,LOW);
-#endif
-
-    pinMode(6, OUTPUT);
-    digitalWrite(6, LOW);
-
+void moduleInit() {
+  
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.println("Initialising module");
 #endif
@@ -210,13 +218,33 @@ void setup() {
     startWebserver();
 }
 
+void setup() {
+#ifdef DEBUGSERIAL
+    DEBUGSERIAL.begin(9600);
+#endif
+    ESP8266.begin(9600); // your esp's baud rate might be different
+
+#ifdef LEONARDO
+    // Wait for serial to become live
+    while (!DEBUGSERIAL);
+    while (!ESP8266);
+    pinMode(RESET,OUTPUT);
+    digitalWrite(RESET,LOW);
+#endif
+    
+    pinMode(6, OUTPUT);
+    digitalWrite(6, LOW);
+
+    moduleInit();
+}
+
 int lightsValue = 0;
 
 void loop() {
   if (ESP8266.available()) {
     String resp = readData(2000);
     int i = 0,j = resp.indexOf('\n');
-    while (j > -1 && j < resp.length()) {
+    while (j > -1 && j <= resp.length()) {
       String line = resp.substring(i,j);
       
       // Process the line
@@ -224,12 +252,12 @@ void loop() {
         String url = line.substring(line.indexOf("GET") + 4, line.indexOf("HTTP/1.1") - 1);
         int connectionId = line.substring(5, line.indexOf(",", 5)).toInt();
         
-#ifdef DEBUGSERIAL
+/*#ifdef DEBUGSERIAL
           DEBUGSERIAL.print("\nLine: ");
           DEBUGSERIAL.println(line);
           DEBUGSERIAL.print("\nURL: ");
           DEBUGSERIAL.println(url);
-#endif
+#endif*/
         if (url == "/lightsOn") {
           
 #ifdef DEBUGSERIAL
@@ -276,16 +304,21 @@ void loop() {
           DEBUGSERIAL.println(response);
 #endif
         ESP8266.print(response);
+        resp = readData(2000);
         
         String closeCommand = "AT+CIPCLOSE="; 
         closeCommand+=connectionId;
      
-        sendATCommand(closeCommand,3000,DEBUG);
+        sendATCommand(closeCommand,1000,DEBUG);
+#ifdef DEBUGSERIAL
+          DEBUGSERIAL.println("Request served");
+#endif
         break;
       }
       
       i = j + 1;
       j = resp.indexOf('\n', i);
+      if (j == -1) j = resp.length();
     }
   }
 }
