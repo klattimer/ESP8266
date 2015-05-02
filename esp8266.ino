@@ -105,11 +105,9 @@ void resetModule() {
         DEBUGSERIAL.println("Resetting Module");
 #endif
     digitalWrite(4, LOW);
-    delay(10);
+    delay(100);
     digitalWrite(4, HIGH);
     delay(1000);
-    digitalWrite(4, LOW);
-    delay(8000);
 }
 
 void reboot() {
@@ -165,7 +163,7 @@ void startWebserver() {
     sendATCommand("AT+CIPSERVER=1,80",2000,DEBUG);
 
 #ifdef DEBUGSERIAL
-    DEBUGSERIAL.print("Ready.");
+    DEBUGSERIAL.println("Ready.");
 #endif
 }
 
@@ -174,7 +172,7 @@ void moduleInit() {
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.println("Initialising module");
 #endif
-    String response = sendATCommand("AT+RST", 1000, DEBUG);
+    String response = sendATCommand("AT+RST", 3000, DEBUG);
     if (response.indexOf("ready") != -1) {
 
 #ifdef DEBUGSERIAL
@@ -231,7 +229,8 @@ void setup() {
     pinMode(RESET,OUTPUT);
     digitalWrite(RESET,LOW);
 #endif
-    
+    pinMode(4, OUTPUT);
+    digitalWrite(4, HIGH);
     pinMode(6, OUTPUT);
     digitalWrite(6, LOW);
 
@@ -304,8 +303,10 @@ void loop() {
           DEBUGSERIAL.println(response);
 #endif
         ESP8266.print(response);
-        resp = readData(2000);
-        
+        resp = readData(5000);
+#ifdef DEBUGSERIAL
+          DEBUGSERIAL.println(resp);
+#endif
         String closeCommand = "AT+CIPCLOSE="; 
         closeCommand+=connectionId;
      
