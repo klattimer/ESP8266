@@ -5,10 +5,19 @@
 
 // We use software serial for UNO/Nano/Micro etc...
 // We use Serial1 for Leo/Mega the define's do the work
-//
+// When we turn debug off, the serial port will take the place
+// of the USB port on UNO/Nano/Mini, or Serial1 for leonardo/mega boards
+
+#define ESPRESET 4
+#define LEDPWM 6
 
 // #define LEONARDO
 // #define MEGA
+#define DEBUG true
+
+// Default serial port is DEBUGSERIAL
+#if DEBUG==true
+#define DEBUGSERIAL Serial
 
 #ifdef LEONARDO
 // Use Leonardo Serial1 for the ESP8266
@@ -16,11 +25,11 @@
 
 // Hardware reset on pin 8
 #define RESET 8
-#else
+#else // LEONARDO
 #ifdef MEGA
 // Use Mega Serial1 for the ESP8266
 #define ESP8266 Serial1
-#else
+#else // MEGA
 // Software serial on pins 5 & 3
 #include <SoftwareSerial.h>
 SoftwareSerial ESP8266(5,3);
@@ -28,21 +37,36 @@ SoftwareSerial ESP8266(5,3);
 #endif // LEONARDO
 
 
-#define DEBUG true
-// Default serial port is DEBUGSERIAL
-#ifdef DEBUG
-#define DEBUGSERIAL Serial
-#endif
 
-String sendATCommand(String command, const int timeout, boolean debug)
+#else // !DEBUG
+#ifdef LEONARDO
+// Use Leonardo Serial1 for the ESP8266
+#define ESP8266 Serial1
+
+// Hardware reset on pin 8
+#define RESET 8
+#else // LEONARDO
+#ifdef MEGA
+// Use Mega Serial1 for the ESP8266
+#define ESP8266 Serial1
+#else // MEGA
+
+// Use UNO tx/rx instead of software serial when debug is disabled.
+#define ESP8266 Serial
+
+#endif // MEGA
+#endif // LEONARDO
+#endif // DEBUG
+
+
+
+String sendATCommand(String command, const int timeout)
 {
-    if (debug) {
 #ifdef DEBUGSERIAL
-        DEBUGSERIAL.print("Sending Command: \"");
-        DEBUGSERIAL.print(command);
-        DEBUGSERIAL.println("\"");
+    DEBUGSERIAL.print("Sending Command: \"");
+    DEBUGSERIAL.print(command);
+    DEBUGSERIAL.println("\"");
 #endif
-    }
 
     String response = "";
     command+="\r\n";
@@ -56,13 +80,12 @@ String sendATCommand(String command, const int timeout, boolean debug)
             response+=c;
         }
     }
-    if (debug) {
+    
 #ifdef DEBUGSERIAL
-        DEBUGSERIAL.print("Response: \"");
-        DEBUGSERIAL.print(response);
-        DEBUGSERIAL.println("\"");
+    DEBUGSERIAL.print("Response: \"");
+    DEBUGSERIAL.print(response);
+    DEBUGSERIAL.println("\"");
 #endif
-    }
 
     
     if (response.indexOf("busy p...") > -1) {
@@ -104,9 +127,9 @@ void resetModule() {
 #ifdef DEBUGSERIAL
         DEBUGSERIAL.println("Resetting Module");
 #endif
-    digitalWrite(4, LOW);
+    digitalWrite(ESPRESET, LOW);
     delay(100);
-    digitalWrite(4, HIGH);
+    digitalWrite(ESPRESET, HIGH);
     delay(1000);
 }
 
@@ -118,10 +141,11 @@ void reboot() {
     resetModule();
     
 #ifdef LEONARDO
+
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.println("Leonardo cannot reboot. Connect pin D8 for hardware reset.");
-    digitalWrite(RESET,HIGH);
 #endif
+    digitalWrite(RESET,HIGH);
     return;
 #endif
 
@@ -130,13 +154,13 @@ void reboot() {
 }
 
 boolean connectWiFi() {
-    sendATCommand("AT+CWMODE=1", 1000, DEBUG);
+    sendATCommand("AT+CWMODE=1", 1000);
     String cmd = "AT+CWJAP=\"";
     cmd += SSID;
     cmd += "\",\"";
     cmd += PASS;
     cmd += "\"";
-    String response = sendATCommand(cmd, 5000, DEBUG);
+    String response = sendATCommand(cmd, 3000);
     if (response.indexOf("OK") != -1) {
 #ifdef DEBUGSERIAL
         DEBUGSERIAL.println("OK, WiFi Connected.");
@@ -153,14 +177,14 @@ void startWebserver() {
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.print("Starting webserver on ");
 #endif
-    String response = sendATCommand("AT+CIFSR",2000, DEBUG);
+    String response = sendATCommand("AT+CIFSR",500);
 
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.println(response);
 #endif
 
-    sendATCommand("AT+CIPMUX=1",2000,DEBUG);
-    sendATCommand("AT+CIPSERVER=1,80",2000,DEBUG);
+    sendATCommand("AT+CIPMUX=1",1000);
+    sendATCommand("AT+CIPSERVER=1,80",1000);
 
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.println("Ready.");
@@ -172,7 +196,7 @@ void moduleInit() {
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.println("Initialising module");
 #endif
-    String response = sendATCommand("AT+RST", 3000, DEBUG);
+    String response = sendATCommand("AT+RST", 2000);
     if (response.indexOf("ready") != -1) {
 
 #ifdef DEBUGSERIAL
@@ -229,20 +253,67 @@ void setup() {
     pinMode(RESET,OUTPUT);
     digitalWrite(RESET,LOW);
 #endif
-    pinMode(4, OUTPUT);
-    digitalWrite(4, HIGH);
-    pinMode(6, OUTPUT);
-    digitalWrite(6, LOW);
+    pinMode(ESPRESET, OUTPUT);
+    digitalWrite(ESPRESET, HIGH);
+    pinMode(LEDPWM, OUTPUT);
+    digitalWrite(LEDPWM, LOW);
 
     moduleInit();
 }
 
 int lightsValue = 0;
 
+void lightsOn(int value) {
+#ifdef DEBUGSERIAL
+    DEBUGSERIAL.println("Lights On");
+#endif
+    analogWrite(LEDPWM, value);
+    lightsValue = value;
+}
+
+void lightsOff() {
+          
+#ifdef DEBUGSERIAL
+    DEBUGSERIAL.println("Lights Off");
+#endif
+    digitalWrite(LEDPWM, LOW);
+    lightsValue = 0;
+}
+
+void fadeTo(int newValue) {
+  int i;
+#ifdef DEBUGSERIAL
+      DEBUGSERIAL.println("Fade to");
+#endif
+  if (newValue > lightsValue) {
+    for (i = lightsValue; i <= newValue; i++) {
+      analogWrite(LEDPWM, i);
+      lightsValue = i;
+      delay(30);
+    }
+  } else {
+    for (i = lightsValue; i >= newValue; i--) {
+      analogWrite(LEDPWM, i);
+      lightsValue = i;
+      delay(30);
+    }
+  }
+}
+
+void lightningPulse() {
+
+}
+
+void candleFlicker() {
+
+}
+
 void loop() {
   if (ESP8266.available()) {
     String resp = readData(2000);
     int i = 0,j = resp.indexOf('\n');
+    if (resp.indexOf("GET") == -1) return;
+    
     while (j > -1 && j <= resp.length()) {
       String line = resp.substring(i,j);
       
@@ -258,25 +329,14 @@ void loop() {
           DEBUGSERIAL.println(url);
 #endif*/
         if (url == "/lightsOn") {
-          
-#ifdef DEBUGSERIAL
-          DEBUGSERIAL.println("Lights On");
-#endif
-          digitalWrite(6, HIGH);
-          lightsValue = 255;
+          lightsOn(255);
         } else if (url == "/lightsOff") {
-          
-#ifdef DEBUGSERIAL
-          DEBUGSERIAL.println("Lights Off");
-#endif
-          digitalWrite(6, LOW);
-          lightsValue = 0;
+          lightsOff();
         } else if (url.startsWith("/lightsOn")) {
           // Figure out the /value part
           String value = url.substring(10);
           int v = value.toInt();
-          analogWrite(6, v);
-          lightsValue = v;
+          fadeTo(v);
 #ifdef DEBUGSERIAL
           DEBUGSERIAL.print("Set lights value: ");
           DEBUGSERIAL.println(v);
@@ -298,19 +358,19 @@ void loop() {
         cipSend += ",";
         cipSend +=response.length();
      
-        sendATCommand(cipSend,1000,DEBUG);
+        sendATCommand(cipSend,500);
 #ifdef DEBUGSERIAL
           DEBUGSERIAL.println(response);
 #endif
         ESP8266.print(response);
-        resp = readData(5000);
+        resp = readData(3000);
 #ifdef DEBUGSERIAL
           DEBUGSERIAL.println(resp);
 #endif
         String closeCommand = "AT+CIPCLOSE="; 
         closeCommand+=connectionId;
      
-        sendATCommand(closeCommand,1000,DEBUG);
+        sendATCommand(closeCommand,500);
 #ifdef DEBUGSERIAL
           DEBUGSERIAL.println("Request served");
 #endif
@@ -320,6 +380,12 @@ void loop() {
       i = j + 1;
       j = resp.indexOf('\n', i);
       if (j == -1) j = resp.length();
+#ifdef DEBUGSERIAL
+          DEBUGSERIAL.println("Infinite loop?");
+#endif
     }
+#ifdef DEBUGSERIAL
+          DEBUGSERIAL.println("Broke loop.");
+#endif
   }
 }
