@@ -3,6 +3,7 @@
 #define PASS "PASSWORD"
 #define CONNECT_ATTEMPTS 5
 
+
 // We use software serial for UNO/Nano/Micro etc...
 // We use Serial1 for Leo/Mega the define's do the work
 // When we turn debug off, the serial port will take the place
@@ -13,16 +14,18 @@
 
 // #define LEONARDO
 // #define MEGA
-#define DEBUG true
+#define DEBUG_ESP false
+
+
+#define SOFTSERIAL_RX 5
+#define SOFTSERIAL_TX 3
 
 // Default serial port is DEBUGSERIAL
-#if DEBUG==true
+#if DEBUG_ESP==true
 #define DEBUGSERIAL Serial
-
 #ifdef LEONARDO
 // Use Leonardo Serial1 for the ESP8266
 #define ESP8266 Serial1
-
 // Hardware reset on pin 8
 #define RESET 8
 #else // LEONARDO
@@ -31,9 +34,9 @@
 #define ESP8266 Serial1
 #else // MEGA
 // Software serial on pins 5 & 3
-#include <SoftwareSerial.h>
-SoftwareSerial ESP8266(5,3);
+#define SOFTSERIAL
 #endif // MEGA
+
 #endif // LEONARDO
 
 
@@ -46,6 +49,7 @@ SoftwareSerial ESP8266(5,3);
 // Hardware reset on pin 8
 #define RESET 8
 #else // LEONARDO
+
 #ifdef MEGA
 // Use Mega Serial1 for the ESP8266
 #define ESP8266 Serial1
@@ -54,11 +58,19 @@ SoftwareSerial ESP8266(5,3);
 // Use UNO tx/rx instead of software serial when debug is disabled.
 #define ESP8266 Serial
 
-#endif // MEGA
+#endif // MEGA*/
+
 #endif // LEONARDO
 #endif // DEBUG
 
+#ifdef SOFTSERIAL
 
+#include <SoftwareSerial.h>
+// If this line is left uncommented, the code doesn't compile when DEBUG_ESP == false
+// This should not be the case as the ifdef's should have prevented this line from
+// being compiled.
+//SoftwareSerial ESP8266(SOFTSERIAL_RX, SOFTSERIAL_TX);
+#endif
 
 String sendATCommand(String command, const int timeout)
 {
@@ -322,12 +334,12 @@ void loop() {
         String url = line.substring(line.indexOf("GET") + 4, line.indexOf("HTTP/1.1") - 1);
         int connectionId = line.substring(5, line.indexOf(",", 5)).toInt();
         
-/*#ifdef DEBUGSERIAL
+#ifdef DEBUGSERIAL
           DEBUGSERIAL.print("\nLine: ");
           DEBUGSERIAL.println(line);
           DEBUGSERIAL.print("\nURL: ");
           DEBUGSERIAL.println(url);
-#endif*/
+#endif
         if (url == "/lightsOn") {
           lightsOn(255);
         } else if (url == "/lightsOff") {
