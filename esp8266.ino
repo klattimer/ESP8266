@@ -1,4 +1,6 @@
 
+#include <Arduino.h>
+
 #define SSID "SSID"
 #define PASS "PASSWORD"
 #define CONNECT_ATTEMPTS 5
@@ -23,12 +25,14 @@
 // Default serial port is DEBUGSERIAL
 #if DEBUG_ESP==true
 #define DEBUGSERIAL Serial
+
 #ifdef LEONARDO
 // Use Leonardo Serial1 for the ESP8266
 #define ESP8266 Serial1
 // Hardware reset on pin 8
 #define RESET 8
 #else // LEONARDO
+
 #ifdef MEGA
 // Use Mega Serial1 for the ESP8266
 #define ESP8266 Serial1
@@ -57,6 +61,7 @@
 
 // Use UNO tx/rx instead of software serial when debug is disabled.
 #define ESP8266 Serial
+//#define SOFTSERIAL
 
 #endif // MEGA*/
 
@@ -64,13 +69,16 @@
 #endif // DEBUG
 
 #ifdef SOFTSERIAL
-
 #include <SoftwareSerial.h>
-// If this line is left uncommented, the code doesn't compile when DEBUG_ESP == false
-// This should not be the case as the ifdef's should have prevented this line from
-// being compiled.
-//SoftwareSerial ESP8266(SOFTSERIAL_RX, SOFTSERIAL_TX);
+SoftwareSerial SOFTY(SOFTSERIAL_RX, SOFTSERIAL_TX);
+#ifndef ESP8266
+#define ESP8266 SOFTY
 #endif
+#endif
+
+void moduleInit();
+void resetModule();
+String readData(const int timeout);
 
 String sendATCommand(String command, const int timeout)
 {
@@ -140,7 +148,7 @@ void resetModule() {
         DEBUGSERIAL.println("Resetting Module");
 #endif
     digitalWrite(ESPRESET, LOW);
-    delay(100);
+    delay(250);
     digitalWrite(ESPRESET, HIGH);
     delay(1000);
 }
@@ -166,13 +174,13 @@ void reboot() {
 }
 
 boolean connectWiFi() {
-    sendATCommand("AT+CWMODE=1", 1000);
+    sendATCommand("AT+CWMODE=1", 3000);
     String cmd = "AT+CWJAP=\"";
     cmd += SSID;
     cmd += "\",\"";
     cmd += PASS;
     cmd += "\"";
-    String response = sendATCommand(cmd, 3000);
+    String response = sendATCommand(cmd, 8000);
     if (response.indexOf("OK") != -1) {
 #ifdef DEBUGSERIAL
         DEBUGSERIAL.println("OK, WiFi Connected.");
@@ -248,7 +256,7 @@ void moduleInit() {
 #ifdef DEBUGSERIAL
     DEBUGSERIAL.println("Connected to access point");
 #endif
-    delay(2000);
+    delay(1000);
     startWebserver();
 }
 
@@ -382,7 +390,7 @@ void loop() {
         String closeCommand = "AT+CIPCLOSE="; 
         closeCommand+=connectionId;
      
-        sendATCommand(closeCommand,500);
+        sendATCommand(closeCommand,1000);
 #ifdef DEBUGSERIAL
           DEBUGSERIAL.println("Request served");
 #endif
